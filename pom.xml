@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>4.0.3</version>
+    <relativePath />
+  </parent>
+
+  <groupId>dtu.services</groupId>
+  <artifactId>fusion-common</artifactId>
+  <version>1.0.0</version>
+  <packaging>jar</packaging>
+
+  <properties>
+    <java.version>25</java.version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <resilience4j.version>2.3.0</resilience4j.version>
+    <dtu-service-library.version>1.0.0</dtu-service-library.version>
+    <jackson2.version>2.21.1</jackson2.version>
+    <jackson2.annotations.version>2.21</jackson2.annotations.version>
+    <jackson3.version>3.1.0</jackson3.version>
+    <jacoco-maven-plugin.version>0.8.14</jacoco-maven-plugin.version>
+    <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
+    <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <!-- Force Jackson 2.x to 2.21.1 to fix CVE SNYK-JAVA-COMFASTERXMLJACKSONCORE-15365924
+      (CWE-770). Also ensures jackson-annotations 2.21 is on the classpath, which provides
+      com.fasterxml.jackson.annotation.JsonSerializeAs required by tools.jackson.databind:3.1.0
+      at class-init time (the version declared by tools.jackson.databind:3.1.0's POM is 2.20,
+      which does not yet contain that class). -->
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-core</artifactId>
+        <version>${jackson2.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+        <version>${jackson2.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-annotations</artifactId>
+        <version>${jackson2.annotations.version}</version>
+      </dependency>
+
+      <!-- Force tools.jackson (Jackson 3.x) to 3.1.0 to fix
+      Allocation of Resources Without Limits or Throttling (SNYK-JAVA-TOOLSJACKSONCORE-15365915 /
+      CWE-770): async non-blocking JSON parser bypasses maxNumberLength constraint, allowing
+      DoS via crafted numeric values. Fixed in 3.1.0.
+      Pinning jackson-dataformat-yaml alongside core/databind so Snyk sees no declared
+      dependency on the vulnerable 3.0.4 artifacts.
+      Transitive path: dtu-service-library -> jackson-dataformat-yaml:3.0.4 ->
+      jackson-core/jackson-databind:3.0.4 -->
+      <dependency>
+        <groupId>tools.jackson.dataformat</groupId>
+        <artifactId>jackson-dataformat-yaml</artifactId>
+        <version>${jackson3.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>tools.jackson.core</groupId>
+        <artifactId>jackson-core</artifactId>
+        <version>${jackson3.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>tools.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+        <version>${jackson3.version}</version>
+      </dependency>
+
+      <!-- Force lz4-java to 1.10.1 to fix:
+      - Out-of-bounds Read (SNYK-JAVA-ORGLZ4-6496292)
+      - Insertion of Sensitive Information Into Sent Data (SNYK-JAVA-ATYAWKLZ4-14219388)
+      Transitive path: dtu-service-library -> spring-kafka -> kafka-clients -> lz4-java -->
+      <dependency>
+        <groupId>org.lz4</groupId>
+        <artifactId>lz4-java</artifactId>
+        <version>1.8.1</version>
+      </dependency>
+      <dependency>
+        <groupId>at.yawk.lz4</groupId>
+        <artifactId>lz4-java</artifactId>
+        <version>1.10.1</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.httpcomponents.client5</groupId>
+      <artifactId>httpclient5</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>io.github.resilience4j</groupId>
+      <artifactId>resilience4j-circuitbreaker</artifactId>
+      <version>${resilience4j.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>io.github.resilience4j</groupId>
+      <artifactId>resilience4j-retry</artifactId>
+      <version>${resilience4j.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>dtu.services</groupId>
+      <artifactId>dtu-service-library</artifactId>
+      <version>${dtu-service-library.version}</version>
+      <exclusions>
+        <!-- Exclude to break the declared path dtu-service-library -> jackson-dataformat-yaml:3.0.4
+        -> jackson-core:3.0.4 (SNYK-JAVA-TOOLSJACKSONCORE-15365915 / CWE-770).
+        Re-added below as a direct dependency at 3.1.0. -->
+        <exclusion>
+          <groupId>tools.jackson.dataformat</groupId>
+          <artifactId>jackson-dataformat-yaml</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <!-- Pinned to 3.1.0 to fix SNYK-JAVA-TOOLSJACKSONCORE-15365915; see dependencyManagement -->
+    <dependency>
+      <groupId>tools.jackson.dataformat</groupId>
+      <artifactId>jackson-dataformat-yaml</artifactId>
+      <version>${jackson3.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.security</groupId>
+      <artifactId>spring-security-oauth2-client</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-configuration-processor</artifactId>
+      <optional>true</optional>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>${maven-compiler-plugin.version}</version>
+        <configuration>
+          <release>${java.version}</release>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <argLine>
+            @{argLine}
+            -Xshare:off
+            -javaagent:${settings.localRepository}/net/bytebuddy/byte-buddy-agent/${byte-buddy.version}/byte-buddy-agent-${byte-buddy.version}.jar</argLine>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>${jacoco-maven-plugin.version}</version>
+        <executions>
+          <execution>
+            <id>jacoco-prepare-agent</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+            <configuration>
+              <includes>
+                <include>dtu/**</include>
+              </includes>
+            </configuration>
+          </execution>
+          <execution>
+            <id>jacoco-report</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+            <configuration>
+              <formats>
+                <format>XML</format>
+                <format>HTML</format>
+              </formats>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-source-plugin</artifactId>
+        <version>${maven-source-plugin.version}</version>
+        <executions>
+          <execution>
+            <id>attach-sources</id>
+            <goals>
+              <goal>jar-no-fork</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+</project>
