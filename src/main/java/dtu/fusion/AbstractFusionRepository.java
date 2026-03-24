@@ -4,8 +4,6 @@ import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.retry.Retry;
 import java.util.function.Supplier;
 
-
-
 /**
  * Abstract base for all Fusion repository beans.
  *
@@ -21,14 +19,12 @@ import java.util.function.Supplier;
  * mappers while calling {@link #validatePagination} and
  * {@link #executeWithResilience} rather than duplicating those patterns.
  */
-public abstract class AbstractFusionRepository
-{
+public abstract class AbstractFusionRepository {
   private final CircuitBreaker circuitBreaker;
   private final Retry retry;
   private final int maxPaginationLimit;
 
-  protected AbstractFusionRepository(CircuitBreaker circuitBreaker, Retry retry, int maxPaginationLimit)
-  {
+  protected AbstractFusionRepository(CircuitBreaker circuitBreaker, Retry retry, int maxPaginationLimit) {
     this.circuitBreaker = circuitBreaker;
     this.retry = retry;
     this.maxPaginationLimit = maxPaginationLimit;
@@ -38,8 +34,7 @@ public abstract class AbstractFusionRepository
    * Executes {@code supplier} guarded by this repository's circuit breaker and
    * retry policy.
    */
-  protected <T> T executeWithResilience(Supplier<T> supplier)
-  {
+  protected <T> T executeWithResilience(Supplier<T> supplier) {
     return circuitBreaker.executeSupplier(() -> retry.executeSupplier(supplier));
   }
 
@@ -51,8 +46,7 @@ public abstract class AbstractFusionRepository
    *                                  {@code limit > maxPaginationLimit}, or
    *                                  {@code offset < 0}
    */
-  protected void validatePagination(Integer limit, Integer offset)
-  {
+  protected void validatePagination(Integer limit, Integer offset) {
     if (limit != null && limit < 1)
       throw new IllegalArgumentException("limit must be >= 1; got: " + limit);
     if (limit != null && limit > maxPaginationLimit)
@@ -61,9 +55,20 @@ public abstract class AbstractFusionRepository
       throw new IllegalArgumentException("offset must be >= 0; got: " + offset);
   }
 
+  /**
+   * Clears any cached data held by this repository.
+   *
+   * <p>
+   * Called by event handlers when the underlying data source signals a change.
+   * The default implementation is a no-op for repositories that do not cache.
+   * Subclasses that maintain a local cache must override this method to evict
+   * all cached entries so that the next call re-fetches from the backend.
+   */
+  public void invalidateCache() {
+  }
+
   /** Returns the current circuit-breaker state for health reporting. */
-  public CircuitBreaker.State circuitBreakerState()
-  {
+  public CircuitBreaker.State circuitBreakerState() {
     return circuitBreaker.getState();
   }
 
@@ -73,8 +78,7 @@ public abstract class AbstractFusionRepository
    *
    * @param name unique circuit-breaker name (e.g. {@code "fusion-erp-projects"})
    */
-  protected static CircuitBreaker createCircuitBreaker(String name, FusionProperties props)
-  {
+  protected static CircuitBreaker createCircuitBreaker(String name, FusionProperties props) {
     return CircuitBreaker.of(name, FusionCircuitBreakerConfig.build(
         props.getCircuitBreaker().getSlidingWindowSize(),
         props.getCircuitBreaker().getFailureRateThreshold(),
@@ -87,8 +91,7 @@ public abstract class AbstractFusionRepository
    *
    * @param name unique retry name (e.g. {@code "fusion-erp-projects-retry"})
    */
-  protected static Retry createRetry(String name, FusionProperties props)
-  {
+  protected static Retry createRetry(String name, FusionProperties props) {
     return FusionRetryConfig.build(name,
         props.getRetry().getMaxAttempts(),
         props.getRetry().getWaitDurationMillis());
