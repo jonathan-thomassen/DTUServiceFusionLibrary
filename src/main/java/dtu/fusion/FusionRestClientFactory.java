@@ -10,15 +10,21 @@ import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuil
 import org.apache.hc.core5.util.Timeout;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.oauth2.client.AuthorizedClientServiceOAuth2AuthorizedClientManager;
 import org.springframework.security.oauth2.client.InMemoryOAuth2AuthorizedClientService;
+import org.springframework.security.oauth2.client.OAuth2AuthorizeRequest;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientProviderBuilder;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.client.registration.InMemoryClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.client.OAuth2ClientHttpRequestInterceptor;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
+import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.support.RestClientAdapter;
+import org.springframework.web.service.invoker.HttpServiceProxyFactory;
 
 /**
  * Factory for building a Fusion-ready {@link RestClient}.
@@ -137,5 +143,56 @@ public final class FusionRestClientFactory
     return RestClient.builder().baseUrl(baseUrl).requestFactory(new HttpComponentsClientHttpRequestFactory(httpClient))
         .requestInterceptor(interceptor).defaultHeader(HttpHeaders.ACCEPT, "application/json")
         .defaultHeader("REST-Framework-Version", "9").defaultHeader(HttpHeaders.ACCEPT_ENCODING, "gzip").build();
+  }
+
+  /**
+   * Creates an {@link OAuth2AuthorizedClientManager} for client-credentials flow
+   * with a fixed service-identity principal substituted for
+   * anonymous/unauthenticated callers.
+   *
+   * <p>
+   * {@code OAuth2ClientHttpRequestInterceptor} resolves the outbound principal
+   * from the inbound security context. For machine-to-machine (M2M) flows the
+   * caller is often anonymous, which {@code InMemoryOAuth2AuthorizedClientService}
+   * rejects because it uses the principal name as a cache key. This method wraps
+   * the delegate so that any request whose principal name is blank or empty is
+   * re-issued with a fixed service identity derived from the registration ID.
+   *
+   * @param registrationId unique registration identifier (e.g.
+   *                       {@code "fusion-hcm"})
+   * @param clientId       OAuth2 client ID
+   * @param clientSecret   OAuth2 client secret
+   * @param scope          requested scope
+   * @param tokenUri       token-endpoint URI
+   */
+  public static OAuth2AuthorizedClientManager buildClientManager(String registrationId, String clientId,
+      String clientSecret, String scope, String tokenUri)
+  {
+    OAuth2AuthorizedClientManager delegate = buildClientCredentialsManager(registrationId, clientId, clientSecret,
+        scope, tokenUri);
+    var servicePrincipal = new AnonymousAuthenticationToken(registrationId, registrationId,
+        AuthorityUtils.createAuthorityList("ROLE_SERVICE"));
+    return authorizeRequest ->
+    {
+      OAuth2AuthorizeRequest request = authorizeRequest;
+      if (!StringUtils.hasText(request.getPrincipal().getName()))
+      {
+        request = OAuth2AuthorizeRequest.withClientRegistrationId(request.getClientRegistrationId())
+            .principal(servicePrincipal).attributes(attrs -> attrs.putAll(authorizeRequest.getAttributes())).build();
+      }
+      return delegate.authorize(request);
+    };
+  }
+
+  /**
+   * Wraps a {@link RestClient} in a Spring HTTP Interface
+   * {@link HttpServiceProxyFactory}.
+   *
+   * @param restClient the RestClient to adapt
+   * @return a proxy factory ready to create HTTP interface client proxies
+   */
+  public static HttpServiceProxyFactory buildProxyFactory(RestClient restClient)
+  {
+    return HttpServiceProxyFactory.builderFor(RestClientAdapter.create(restClient)).build();
   }
 }
