@@ -1,8 +1,8 @@
 package dtu.fusion;
 
+import io.github.resilience4j.core.IntervalFunction;
 import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.retry.RetryConfig;
-import java.time.Duration;
 import org.springframework.web.client.RestClientException;
 
 /**
@@ -14,10 +14,8 @@ import org.springframework.web.client.RestClientException;
  * failures which succeed on a subsequent attempt do not increment the
  * circuit-breaker failure rate.
  */
-public final class FusionRetryConfig
-{
-  private FusionRetryConfig()
-  {
+public final class FusionRetryConfig {
+  private FusionRetryConfig() {
   }
 
   /**
@@ -27,10 +25,10 @@ public final class FusionRetryConfig
    * @param maxAttempts        total number of attempts (including the first call)
    * @param waitDurationMillis fixed pause between attempts in milliseconds
    */
-  public static Retry build(String name, int maxAttempts, long waitDurationMillis)
-  {
+  public static Retry build(String name, int maxAttempts, long waitDurationMillis) {
     RetryConfig config = RetryConfig.custom().maxAttempts(maxAttempts)
-        .waitDuration(Duration.ofMillis(waitDurationMillis)).retryOnException(RestClientException.class::isInstance)
+        .intervalFunction(IntervalFunction.ofRandomized(waitDurationMillis))
+        .retryOnException(RestClientException.class::isInstance)
         .build();
     return Retry.of(name, config);
   }
