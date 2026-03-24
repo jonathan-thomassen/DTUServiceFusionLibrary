@@ -153,10 +153,11 @@ public final class FusionRestClientFactory
    * <p>
    * {@code OAuth2ClientHttpRequestInterceptor} resolves the outbound principal
    * from the inbound security context. For machine-to-machine (M2M) flows the
-   * caller is often anonymous, which {@code InMemoryOAuth2AuthorizedClientService}
-   * rejects because it uses the principal name as a cache key. This method wraps
-   * the delegate so that any request whose principal name is blank or empty is
-   * re-issued with a fixed service identity derived from the registration ID.
+   * caller is often anonymous, which
+   * {@code InMemoryOAuth2AuthorizedClientService} rejects because it uses the
+   * principal name as a cache key. This method wraps the delegate so that any
+   * request whose principal name is blank or empty is re-issued with a fixed
+   * service identity derived from the registration ID.
    *
    * @param registrationId unique registration identifier (e.g.
    *                       {@code "fusion-hcm"})
